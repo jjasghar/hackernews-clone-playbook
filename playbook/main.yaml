@@ -1,0 +1,64 @@
+---
+- name: Install a hackernews clone
+  hosts: all
+
+  tasks:
+    - name: Fetch the variables from var file
+      include_vars:
+        file: ../vars/main.yml
+
+    - name: install git
+      dnf:
+        name:
+          - git
+          - rlwrap
+        state: latest
+
+    - name: Pull down the install script for racket
+      get_url:
+        url: 'https://mirror.racket-lang.org/installers/{{ racket_version }}/racket-{{ racket_version }}-x86_64-linux.sh'
+        dest: /tmp/racket-{{ racket_version }}.sh
+        mode: '0755'
+
+    - name: Run the install script for racket
+      shell:
+        cmd: bash racket-{{ racket_version }}.sh --unix-style --dest /usr
+        chdir: /tmp
+        creates: '/usr/bin/racket-uninstall'
+
+    - name: checkout anarki to a working directory
+      become_user: "{{ install_user }}"
+      git:
+        repo: 'http://github.com/arclanguage/anarki'
+        dest: "/home/{{ install_user }}/anarki"
+
+    - name: create the www directory
+      become_user: "{{ install_user }}"
+      file:
+        path: "/home/{{ install_user }}/anarki/apps/news/www"
+        state: directory
+        mode: '0755'
+
+    - name: change the ownership to the
+      file:
+        path: "/home/{{ install_user }}/anarki"
+        recurse: yes
+        owner: "{{ install_user }}"
+        group: "{{ install_user }}"
+
+#    - name: Install the sha package via racket
+#      shell:
+#        cmd: raco pkg install sha
+#      become_user: "{{ install_user }}"
+
+    - name: run the run-news command
+      shell:
+        cmd: raco pkg install sha && nohup bash run-news
+        chdir: "/home/{{ install_user }}/anarki/apps/news"
+      become_user: "{{ install_user }}"
+
+    - name: stop and disable firewall
+      service:
+        name: firewalld
+        state: stopped
+        enabled: no
